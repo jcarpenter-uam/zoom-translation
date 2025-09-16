@@ -1,5 +1,5 @@
 import os
-from typing import AsyncGenerator
+from typing import AsyncGenerator, List
 
 from dotenv import load_dotenv
 from openai import APIError, AsyncOpenAI
@@ -14,7 +14,6 @@ class QwenTranslationService:
     def __init__(self):
         load_dotenv()
         try:
-            # Initialize the async OpenAI client to point to the DashScope endpoint
             self.client = AsyncOpenAI(
                 api_key=os.environ["DASHSCOPE_API_KEY"],
                 base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
@@ -23,16 +22,33 @@ class QwenTranslationService:
             raise ValueError("The 'DASHSCOPE_API_KEY' environment variable is not set.")
 
     async def translate_stream(
-        self, text_to_translate: str
+        self, text_to_translate: str, context: List[str]
     ) -> AsyncGenerator[str, None]:
         """
-        Translates a block of text using the Qwen model and streams the results.
+        Translates a block of text using the Qwen model and streams the results,
+        leveraging previous sentences for context.
         """
+        combined_prompt = (
+            "Preserve the core meaning and nuance of the original text without adding new information. "
+            "Use the provided context to resolve ambiguities."
+        )
+
+        if context:
+            context_str = " ".join(context)
+            combined_prompt += (
+                f'\n\nPrevious sentences (for context): "{context_str}"\n\n'
+                f'Translate ONLY the following new Chinese sentence: "{text_to_translate}"'
+            )
+        else:
+            combined_prompt += (
+                f'\n\nTranslate the following Chinese sentence: "{text_to_translate}"'
+            )
+
         try:
             stream = await self.client.chat.completions.create(
                 model="qwen-mt-turbo",
                 messages=[
-                    {"role": "user", "content": text_to_translate},
+                    {"role": "user", "content": combined_prompt},
                 ],
                 stream=True,
                 extra_body={
