@@ -28,7 +28,7 @@ services:
       - APISECRET=${APISECRET}
       - APIKEY=${APIKEY}
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
-      - DEBUG_MODE=True
+      - DEBUG_MODE=True # Can also be set to False for no audio save file
     networks:
       - zoom-translation
 
