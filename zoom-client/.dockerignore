@@ -4,3 +4,4 @@ setup.md
 node_modules/
 Dockerfile
 .dockerignore
+logs/

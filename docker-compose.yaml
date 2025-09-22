@@ -1,13 +1,16 @@
 services:
-  zoom-rtms-client:
-    build: ./zoom-rtms
-    container_name: zoom-rtms-client
+  zoom-client:
+    build: ./zoom-client
+    container_name: zoom-client
     restart: unless-stopped
     ports:
       - "8080:8080"
+      - "3000:3000"
     environment:
       - ZM_RTMS_CLIENT=${ZM_RTMS_CLIENT}
       - ZM_RTMS_SECRET=${ZM_RTMS_SECRET}
+      - TRANSCRIPTION_URL=${TRANSCRIPTION_URL}
+      - TRANSLATION_URL=${TRANSLATION_URL}
       - TRANSCRIPTION_SERVER_URL=${TRANSCRIPTION_SERVER_URL}
     depends_on:
       - realtime-translation

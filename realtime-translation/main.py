@@ -2,15 +2,12 @@ import asyncio
 import base64
 import json
 import os
-from collections import deque
 from datetime import datetime, timezone
 from typing import List
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from services.debug_service import save_audio_to_wav
 from services.transcription_service import (
     STATUS_CONTINUE_FRAME,
@@ -28,22 +25,10 @@ app = FastAPI(
     description="A WebSocket API to stream audio for real-time transcription (iFlyTek) and translation (Alibaba Qwen).",
 )
 
-templates = Jinja2Templates(directory="templates")
 
 # It defaults to "False" if the variable is not set.
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 print(f"  - Debug mode is: {'ON' if DEBUG_MODE else 'OFF'}")
-
-
-@app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    context = {
-        "request": request,
-        # Injecting VARS for html page
-        "transcription_url": "ws://localhost:8000/ws/view_transcription",
-        "translation_url": "ws://localhost:8000/ws/view_translation",
-    }
-    return templates.TemplateResponse("index.html", context)
 
 
 class ConnectionManager:

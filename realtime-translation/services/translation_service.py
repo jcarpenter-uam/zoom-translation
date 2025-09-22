@@ -1,5 +1,5 @@
 import os
-from typing import AsyncGenerator, List
+from typing import AsyncGenerator
 
 from dotenv import load_dotenv
 from openai import APIError, AsyncOpenAI
