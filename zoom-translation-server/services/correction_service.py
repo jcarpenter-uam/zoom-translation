@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from openai import APIError, AsyncOpenAI
 
 from .debug_service import log_pipeline_step, log_utterance_step
+from .rag_service import RagService
 
 
 class RetranslationService:
@@ -110,13 +111,20 @@ class CorrectionService:
     This service is stateful and manages the utterance history.
     """
 
-    def __init__(self, ollama_url: str, viewer_manager, model: str = "correction"):
+    def __init__(
+        self,
+        ollama_url: str,
+        viewer_manager,
+        rag_service: RagService,
+        model: str = "correction",
+    ):
         """
         Initializes the service.
 
         Args:
             ollama_url (str): The base URL for the Ollama API.
             viewer_manager: The WebSocket manager for broadcasting updates.
+            rag_service (RagService): The service for logging to the RAG DB.
             model (str): The name of the model to use for corrections.
         """
         log_pipeline_step(
@@ -128,13 +136,18 @@ class CorrectionService:
         self.client = ollama.AsyncClient(host=ollama_url)
         self.viewer_manager = viewer_manager
         self.retranslation_service = RetranslationService()
+        self.rag_service = rag_service
         self.utterance_history = deque(maxlen=5)
         self.CORRECTION_CONTEXT_THRESHOLD = 5
 
         log_pipeline_step(
             "CORRECTION",
             "Ollama correction client initialized.",
-            extra={"model": model, "host": ollama_url},
+            extra={
+                "model": model,
+                "host": ollama_url,
+                "rag_enabled": True,
+            },
             detailed=True,
         )
 
@@ -270,7 +283,13 @@ class CorrectionService:
         is_needed = response_data.get("is_correction_needed", False)
         reason = response_data.get("reasoning", "No reason provided.")
         corrected_transcription = response_data.get("corrected_sentence")
-
+        confidence = response_data.get("confidence")
+        try:
+            correction_confidence = (
+                float(confidence) if confidence is not None else None
+            )
+        except (ValueError, TypeError):
+            correction_confidence = None
         if (
             is_needed
             and corrected_transcription
@@ -297,6 +316,24 @@ class CorrectionService:
                 text_to_translate=corrected_transcription
             ):
                 full_corrected_translation = chunk
+
+            asyncio.create_task(
+                self.rag_service.log_correction(
+                    original_transcription=target_utterance["transcription"],
+                    original_translation=target_utterance["translation"],
+                    context_history=context_list,
+                    corrected_transcription=corrected_transcription,
+                    corrected_translation=full_corrected_translation,
+                    correction_reason=reason,
+                    correction_confidence=correction_confidence,
+                    metadata={
+                        "message_id": target_utterance["message_id"],
+                        "speaker": target_utterance["speaker"],
+                        "model": self.model,
+                        "correction_applied": True,
+                    },
+                )
+            )
 
             payload = {
                 "message_id": target_utterance["message_id"],
@@ -327,6 +364,25 @@ class CorrectionService:
                 if not is_needed
                 else "Model suggested a correction, but it was empty or identical to the original."
             )
+
+            asyncio.create_task(
+                self.rag_service.log_correction(
+                    original_transcription=target_utterance["transcription"],
+                    original_translation=target_utterance["translation"],
+                    context_history=context_list,
+                    corrected_transcription=target_utterance["transcription"],
+                    corrected_translation=target_utterance["translation"],
+                    correction_reason=log_reason,
+                    correction_confidence=correction_confidence,
+                    metadata={
+                        "message_id": target_utterance["message_id"],
+                        "speaker": target_utterance["speaker"],
+                        "model": self.model,
+                        "correction_applied": False,
+                    },
+                )
+            )
+
             log_utterance_step(
                 "CORRECTION",
                 target_utterance["message_id"],

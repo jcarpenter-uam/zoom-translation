@@ -42,6 +42,7 @@ viewer_manager = ConnectionManager(cache=transcript_cache)
 rtms_router = create_transcribe_router(
     viewer_manager=viewer_manager,
     DEBUG_MODE=DEBUG_MODE,
+    db_engine=db_engine,
 )
 app.include_router(rtms_router)
 

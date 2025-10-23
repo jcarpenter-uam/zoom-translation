@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy.engine import Engine
 
 from .audio_processing_service import AudioProcessingService
 from .correction_service import CorrectionService
@@ -15,10 +16,11 @@ from .debug_service import (
     log_utterance_start,
     save_audio_to_wav,
 )
+from .rag_service import RagService
 from .soniox_service import SonioxResult, SonioxService
 
 
-def create_transcribe_router(viewer_manager, DEBUG_MODE):
+def create_transcribe_router(viewer_manager, DEBUG_MODE, db_engine: Engine):
     router = APIRouter()
 
     @router.websocket("/ws/transcribe")
@@ -38,8 +40,14 @@ def create_transcribe_router(viewer_manager, DEBUG_MODE):
                 f"Ollama Correction Service URL: {ollama_url}",
                 detailed=False,
             )
+
+            rag_service = RagService(ollama_url=ollama_url, engine=db_engine)
+            log_pipeline_step("SYSTEM", "RAG Service initialized and connected to DB.")
+
             correction_service = CorrectionService(
-                ollama_url=ollama_url, viewer_manager=viewer_manager
+                ollama_url=ollama_url,
+                viewer_manager=viewer_manager,
+                rag_service=rag_service,
             )
         except KeyError:
             log_pipeline_step(
@@ -136,6 +144,7 @@ def create_transcribe_router(viewer_manager, DEBUG_MODE):
                         "message_id": current_message_id,
                         "speaker": current_speaker,
                         "transcription": result.transcription,
+                        "translation": result.translation,
                     }
                     asyncio.create_task(
                         correction_service.process_final_utterance(utterance_to_store)
@@ -173,15 +182,15 @@ def create_transcribe_router(viewer_manager, DEBUG_MODE):
                 message = json.loads(raw_message)
                 current_speaker = message.get("userName", "Unknown")
                 audio_chunk = base64.b64decode(message.get("audio"))
-                log_pipeline_step(
-                    "SESSION",
-                    "Received audio chunk from client.",
-                    extra={
-                        "speaker": current_speaker,
-                        "chunk_bytes": len(audio_chunk),
-                    },
-                    detailed=True,
-                )
+                # log_pipeline_step(
+                #     "SESSION",
+                #     "Received audio chunk from client.",
+                #     extra={
+                #         "speaker": current_speaker,
+                #         "chunk_bytes": len(audio_chunk),
+                #     },
+                #     detailed=True,
+                # )
 
                 if DEBUG_MODE:
                     session_raw_audio.append(audio_chunk)
