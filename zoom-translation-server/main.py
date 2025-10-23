@@ -1,4 +1,5 @@
 import os
+import sys
 
 import uvicorn
 from dotenv import load_dotenv
@@ -10,7 +11,18 @@ from fastapi.staticfiles import StaticFiles
 from services.cache_service import TranscriptCache
 from services.connection_manager_service import ConnectionManager
 from services.debug_service import log_pipeline_step
+from services.rag_service import dbconnect
 from services.rtms_receiver_service import create_transcribe_router
+
+log_pipeline_step("SYSTEM", "Initializing database connection...", detailed=False)
+db_engine = dbconnect()
+
+if db_engine:
+    log_pipeline_step(
+        "SYSTEM", "Database setup successful. Engine is ready.", detailed=False
+    )
+else:
+    sys.exit("Database connection failed. Application cannot start.")
 
 app = FastAPI(
     title="Real-Time Transcription and Translation API",
